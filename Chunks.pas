@@ -21,6 +21,12 @@ var
   f:THandle;
   s:string;
   new_sz:cardinal;
+
+  chunk_ids:array of cardinal;
+  chunk_nonstring_data_sz:array of cardinal;
+
+  i:integer;
+  chunk_found:boolean;
 begin
   result:='';
 
@@ -30,21 +36,34 @@ begin
     exit;
   end;
 
-  chunk_sz:=FindChunk($817, f, 0);
-  if chunk_sz>0 then begin
-    FileSeek(f, 8, 1);
-    s:=ReadString(f, 0);
-    new_sz:=length(s)+8+1;
-    if new_sz<>chunk_sz then begin
-      result:=path+': invalid size!';
-      if autocorrect then begin
-        chunk_sz:=FindChunk($817, f, 0);
-        FileSeek(f, -4, 1);
-        FileWrite(f, new_sz, 4);
+  setlength(chunk_ids, 2);
+  setlength(chunk_nonstring_data_sz, 2);
+  chunk_ids[0]:=$817;
+  chunk_nonstring_data_sz[0]:=8;
+  chunk_ids[1]:=$818;
+  chunk_nonstring_data_sz[1]:=0;
+
+  chunk_found:=false;
+  for i:=0 to length(chunk_ids)-1 do begin
+    chunk_sz:=FindChunk(chunk_ids[i], f, 0);
+    if chunk_sz>0 then begin
+      chunk_found:=true;
+      FileSeek(f, chunk_nonstring_data_sz[i], 1);
+      s:=ReadString(f, 0);
+      new_sz:=length(s)+chunk_nonstring_data_sz[i]+1;
+      if new_sz<>chunk_sz then begin
+        result:=result+path+': invalid size for chunk '+inttohex(chunk_ids[i], 4)+'!'+chr($0d)+chr($0a);
+        if autocorrect then begin
+          chunk_sz:=FindChunk(chunk_ids[i], f, 0);
+          FileSeek(f, -4, 1);
+          FileWrite(f, new_sz, 4);
+        end;
       end;
     end;
-  end else begin
-    result:=path+': No BUMP chunk!';
+  end;
+
+  if not chunk_found then begin
+    result:=path+': No BUMP chunks!';
   end;
 
   FileClose(f);
